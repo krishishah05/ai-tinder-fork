@@ -53,7 +53,12 @@ function generateProfiles(count = 12) {
   const profiles = [];
   for (let i = 0; i < count; i++) {
     // Pick 3 unique seeds per profile so double-tap has photos to cycle through.
-    const shuffled = [...UNSPLASH_SEEDS].sort(() => Math.random() - 0.5);
+    // Fisher-Yates produces an unbiased shuffle (sort-based shuffle is biased).
+    const shuffled = [...UNSPLASH_SEEDS];
+    for (let j = shuffled.length - 1; j > 0; j--) {
+      const k = Math.floor(Math.random() * (j + 1));
+      [shuffled[j], shuffled[k]] = [shuffled[k], shuffled[j]];
+    }
     const imgs = shuffled.slice(0, 3).map(imgFor);
     profiles.push({
       id: `p_${i}_${Date.now().toString(36)}`,
@@ -79,6 +84,7 @@ const nopeBtn     = document.getElementById("nopeBtn");
 const superLikeBtn = document.getElementById("superLikeBtn");
 
 let profiles = [];
+let dismissTimerId = null; // track in-flight dismissal timer so Shuffle can cancel it
 
 // -------------------
 // Card builder
@@ -131,10 +137,16 @@ function buildCard(p, idx, total) {
 
   const titleRow = document.createElement("div");
   titleRow.className = "title-row";
-  titleRow.innerHTML = `
-    <h2 class="card__title">${p.name}</h2>
-    <span class="card__age">${p.age}</span>
-  `;
+  // Use textContent instead of innerHTML to avoid injection if data ever comes
+  // from an external source.
+  const nameEl = document.createElement("h2");
+  nameEl.className   = "card__title";
+  nameEl.textContent = p.name;
+  const ageEl = document.createElement("span");
+  ageEl.className   = "card__age";
+  ageEl.textContent = p.age;
+  titleRow.appendChild(nameEl);
+  titleRow.appendChild(ageEl);
 
   const meta = document.createElement("div");
   meta.className   = "card__meta";
@@ -167,6 +179,11 @@ function buildCard(p, idx, total) {
 // Deck rendering
 // -------------------
 function renderDeck() {
+  // Cancel any in-flight dismissal timer so its callback can't attach duplicate
+  // listeners to the freshly-rendered deck.
+  clearTimeout(dismissTimerId);
+  dismissTimerId = null;
+
   deckEl.setAttribute("aria-busy", "true");
   deckEl.innerHTML = "";
 
@@ -231,7 +248,8 @@ function dismissTop(direction) {
   card.style.transform  = `translate(${tx}, ${ty}) rotate(${rot})`;
   card.style.opacity    = "0";
 
-  setTimeout(() => {
+  dismissTimerId = setTimeout(() => {
+    dismissTimerId = null;
     card.remove();
     if (deckEl.children.length === 0) {
       showEmptyState();
