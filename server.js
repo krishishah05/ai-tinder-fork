@@ -15,7 +15,8 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
 // ─── SQLite setup (Bonus: real local database) ────────────────────────────────
-const db = new Database(path.join(__dirname, "tinder.sqlite"));
+// DB_PATH env var lets tests inject ":memory:" instead of the real file.
+const db = new Database(process.env.DB_PATH || path.join(__dirname, "tinder.sqlite"));
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS decisions (
@@ -70,8 +71,6 @@ function scheduleIncomingLike() {
     scheduleIncomingLike(); // schedule next one
   }, delay);
 }
-scheduleIncomingLike();
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function getStats() {
   return {
@@ -152,17 +151,23 @@ app.delete("/api/decisions", (_req, res) => {
 });
 
 // ─── Start ───────────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`\n🔥 AI Tinder backend running at http://localhost:${PORT}`);
-  console.log("   Endpoints:");
-  console.log("     GET    /api/health");
-  console.log("     POST   /api/decision");
-  console.log("     GET    /api/matches/poll     ← frontend polls this every 10 s");
-  console.log("     GET    /api/matches          ← full match history");
-  console.log("     GET    /api/decisions");
-  console.log("     GET    /api/decisions/stats");
-  console.log("     DELETE /api/decisions");
-  console.log("\n   SQLite DB: tinder.sqlite");
-  console.log("   Simulating incoming likes every 20–30 s...\n");
-});
+// Guard lets tests `require('./server')` without binding a port or running timers.
+if (require.main === module) {
+  scheduleIncomingLike();
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`\n🔥 AI Tinder backend running at http://localhost:${PORT}`);
+    console.log("   Endpoints:");
+    console.log("     GET    /api/health");
+    console.log("     POST   /api/decision");
+    console.log("     GET    /api/matches/poll     ← frontend polls this every 10 s");
+    console.log("     GET    /api/matches          ← full match history");
+    console.log("     GET    /api/decisions");
+    console.log("     GET    /api/decisions/stats");
+    console.log("     DELETE /api/decisions");
+    console.log("\n   SQLite DB: tinder.sqlite");
+    console.log("   Simulating incoming likes every 20–30 s...\n");
+  });
+}
+
+module.exports = { app, db };
